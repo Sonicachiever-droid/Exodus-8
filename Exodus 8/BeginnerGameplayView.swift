@@ -75,20 +75,6 @@ private struct WhiteNoteBoxOverlay: View {
                         return shouldUseAccidentalStyle ? Color.white.opacity(0.86) : Color.black.opacity(0.72)
                     }
                 }()
-                let auraColor: Color = {
-                    guard isActive else { return .clear }
-                    switch answerFeedback {
-                    case .green:
-                        return Color(red: 0.38, green: 0.92, blue: 0.45).opacity(0.35)
-                    case .red:
-                        return Color(red: 0.92, green: 0.28, blue: 0.20).opacity(0.35)
-                    default:
-                        if blinkingActive {
-                            return blinkOrange ? Color(red: 1.0, green: 0.55, blue: 0.0).opacity(0.35) : Color.white.opacity(0.35)
-                        }
-                        return shouldUseAccidentalStyle ? Color.black.opacity(0.22) : Color.white.opacity(0.38)
-                    }
-                }()
 
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(fillColor)
@@ -96,8 +82,6 @@ private struct WhiteNoteBoxOverlay: View {
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .stroke(strokeColor, lineWidth: 2)
                     )
-                    .shadow(color: auraColor, radius: 4)
-                    .shadow(color: auraColor.opacity(0.55), radius: 8)
                     .frame(width: boxWidth, height: clampedBoxHeight)
                     .overlay {
                         if isActive, let displayedNoteText, !displayedNoteText.isEmpty {
@@ -106,7 +90,6 @@ private struct WhiteNoteBoxOverlay: View {
                                 .minimumScaleFactor(0.32)
                                 .lineLimit(1)
                                 .foregroundStyle(shouldUseAccidentalStyle ? Color.white.opacity(0.96) : revealedNoteTextColor)
-                                .shadow(color: Color.black.opacity(0.55), radius: 2)
                                 .padding(.horizontal, 1)
                         }
                     }

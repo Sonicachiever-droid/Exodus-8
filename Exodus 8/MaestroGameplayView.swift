@@ -232,15 +232,15 @@ private struct GameplayControlPlateShell: View {
 
 private struct StartupSequenceView: View {
     enum Phase {
-        case systemOnline
-        case phaseOne
+        case systemOnlineStatic
         case armed
     }
 
     let elapsed: TimeInterval
+    let firstButtonPressed: Bool
 
     var body: some View {
-        let state = Self.state(for: elapsed)
+        let state = Self.state(for: elapsed, firstButtonPressed: firstButtonPressed)
         let fontSize: CGFloat = state.phase == .armed ? 29.6 : 34
         let fontWeight: Font.Weight = .black
 
@@ -256,26 +256,16 @@ private struct StartupSequenceView: View {
             .opacity(state.isVisible ? 1 : 0)
     }
 
-    static func state(for elapsed: TimeInterval) -> (text: String, color: Color, isVisible: Bool, phase: Phase) {
-        let firstFlashPeriod: TimeInterval = 1.0
-        let secondFlashPeriod: TimeInterval = 1.0
+    static func state(for elapsed: TimeInterval, firstButtonPressed: Bool) -> (text: String, color: Color, isVisible: Bool, phase: Phase) {
         let armedFlashPeriod: TimeInterval = 1.0
-        let firstBlockDuration = firstFlashPeriod * 4
-        let secondBlockDuration = firstBlockDuration + (secondFlashPeriod * 4)
-
-        if elapsed < firstBlockDuration {
-            let isVisible = Int(elapsed / firstFlashPeriod).isMultiple(of: 2)
-            return ("SYSTEM ONLINE", Color.orange.opacity(0.98), isVisible, .systemOnline)
+        
+        // Static "SYSTEM ONLINE" until first button pressed
+        if !firstButtonPressed {
+            return ("SYSTEM ONLINE", Color.orange.opacity(0.98), true, .systemOnlineStatic)
         }
 
-        if elapsed < secondBlockDuration {
-            let localElapsed = elapsed - firstBlockDuration
-            let isVisible = Int(localElapsed / secondFlashPeriod).isMultiple(of: 2)
-            return ("PHASE 1", Color.red.opacity(0.98), isVisible, .phaseOne)
-        }
-
-        let localElapsed = elapsed - secondBlockDuration
-        let isVisible = Int(localElapsed / armedFlashPeriod).isMultiple(of: 2)
+        // Armed phase with flashing after first button press
+        let isVisible = Int(elapsed / armedFlashPeriod).isMultiple(of: 2)
         return ("Memorization Sequence Armed", Color.green.opacity(0.98), isVisible, .armed)
     }
 }
@@ -577,6 +567,7 @@ private struct DeveloperConsoleFrame: View {
     let promptText: String
     let startupElapsed: TimeInterval
     let showStartupSequence: Bool
+    let startupFirstButtonPressed: Bool
 
     private var isHintVisible: Bool {
         promptText.lowercased().hasPrefix("hint:")
@@ -638,7 +629,7 @@ private struct DeveloperConsoleFrame: View {
                                 }
 
                                 if showStartupSequence {
-                                    StartupSequenceView(elapsed: startupElapsed)
+                                    StartupSequenceView(elapsed: startupElapsed, firstButtonPressed: startupFirstButtonPressed)
                                         .padding(.horizontal, 10)
                                         .padding(.top, 24)
                                         .padding(.bottom, 8)
@@ -769,10 +760,10 @@ private struct WhiteNoteBoxOverlay: View {
                 let stringNumber = totalStrings - index
                 let isActive = activeSet.contains(stringNumber)
                 let fillColor: Color = {
-                    guard isActive else { return .clear }
+                    guard isActive else { return Color.clear }
                     switch answerFeedback {
                     case .red:
-                        return Color(red: 1.0, green: 0.62, blue: 0.58).opacity(0.95)
+                        return Color(red: 0.48, green: 0.06, blue: 0.06).opacity(0.9)
                     default:
                         return currentQuestionIsAccidental ? Color.black.opacity(0.95) : Color.white.opacity(0.92)
                     }
@@ -785,14 +776,6 @@ private struct WhiteNoteBoxOverlay: View {
                         return currentQuestionIsAccidental ? Color.white.opacity(0.86) : Color.black.opacity(0.72)
                     }
                 }()
-                let auraColor: Color = {
-                    guard isActive else { return .clear }
-                    switch answerFeedback {
-                    case .red: return Color(red: 0.92, green: 0.28, blue: 0.20).opacity(0.35)
-                    default:
-                        return currentQuestionIsAccidental ? Color.black.opacity(0.22) : Color.white.opacity(0.38)
-                    }
-                }()
                 ZStack {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(fillColor)
@@ -800,11 +783,9 @@ private struct WhiteNoteBoxOverlay: View {
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .stroke(strokeColor, lineWidth: 2)
                         )
-                        .shadow(color: auraColor, radius: 4)
-                        .shadow(color: auraColor.opacity(0.55), radius: 8)
-                    if isActive && answerFeedback != nil {
+                    if isActive {
                         Text(correctNote)
-                            .font(.system(size: clampedBoxHeight * 0.42, weight: .black, design: .default))
+                            .font(.system(size: clampedBoxHeight * 0.38, weight: .black, design: .default))
                             .foregroundColor(currentQuestionIsAccidental ? .white : .black)
                             .minimumScaleFactor(0.5)
                             .lineLimit(1)
@@ -1100,6 +1081,7 @@ struct MaestroGameplayView: View {
     @State private var startupSequenceStartDate: Date = .now
     @State private var startupSequenceElapsed: TimeInterval = 0
     @State private var startupSequenceActivated: Bool = false
+    @State private var startupFirstButtonPressed: Bool = false
     @State private var assetToNutBottomDelta: CGFloat? = nil
     @State private var questionBoxAssistActive: Bool = false
     @State private var gameplayMenuExpanded: Bool = false
@@ -1123,7 +1105,6 @@ struct MaestroGameplayView: View {
     private enum StartupSpeechPhase {
         case idle
         case pendingSystem
-        case pendingPhase
         case pendingArmed
     }
 
@@ -1289,16 +1270,18 @@ struct MaestroGameplayView: View {
             let calibratedAssetToNutDelta = assetToNutBottomDelta ?? 0
             let _ = (nutBottomY + calibratedAssetToNutDelta) - rowOneBottomLineY
             let startupState: (text: String, color: Color, isVisible: Bool, phase: StartupSequenceView.Phase) = {
-                guard startupSequenceActivated else {
-                    return ("", .clear, false, .systemOnline)
+                guard isCodeScreensaverMode else {
+                    return ("", .clear, false, .systemOnlineStatic)
                 }
-                return StartupSequenceView.state(for: startupSequenceElapsed)
+                guard startupSequenceActivated else {
+                    return ("SYSTEM ONLINE", Color.orange.opacity(0.98), true, .systemOnlineStatic)
+                }
+                return StartupSequenceView.state(for: startupSequenceElapsed, firstButtonPressed: true)
             }()
             let screensaverThumbState: ThumbGlowState = {
                 guard startupState.isVisible else { return .neutral }
                 switch startupState.phase {
-                case .systemOnline: return .orange
-                case .phaseOne: return .red
+                case .systemOnlineStatic: return .orange
                 case .armed: return .green
                 }
             }()
@@ -1396,33 +1379,37 @@ struct MaestroGameplayView: View {
 
                 if showFretboardGuide && !isCodeScreensaverMode {
                     let guideBoxHeight = topStatusOuterHeight * 0.5
-                    let guideBoxCornerRadius = guideBoxHeight * 0.35
                     let guideBoxCenterY = windowBottomY - (guideBoxHeight / 2) - 4
-                    let boxWidth = guideBoxHeight * 1.5
                     let stringCenters = GuitarStringLayout.stringCenters(containerWidth: proxy.size.width, neckWidth: neckWidth)
+                    let centerSpacings = (1..<stringCenters.count).map { stringCenters[$0] - stringCenters[$0 - 1] }
+                    let minCenterSpacing = centerSpacings.min() ?? 60
+                    let spacingGap = max(minCenterSpacing * 0.12, 6)
+                    let maxBoxWidthFromSpacing = max(minCenterSpacing - spacingGap, 0)
+                    let boxWidth = min(guideBoxHeight * 1.8, maxBoxWidthFromSpacing)
                     let fretboardStrings = (0..<GuitarStringLayout.totalStrings).map { GuitarStringLayout.highestStringNumber - $0 }
-                    let showNoteLabels = activeAnswerFeedback == .green
                     ZStack {
                         ForEach(Array(fretboardStrings.enumerated()), id: \.offset) { index, stringNumber in
-                            let note = noteName(forString: stringNumber, fret: max(currentRound, 0), useFlats: false)
-                            let isAccidental = note.contains("#") || note.contains("b")
-                            ZStack {
-                                RoundedRectangle(cornerRadius: guideBoxCornerRadius, style: .continuous)
-                                    .fill(isAccidental ? Color.black.opacity(0.95) : Color.white.opacity(0.92))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: guideBoxCornerRadius, style: .continuous)
-                                            .stroke(isAccidental ? Color.white.opacity(0.86) : Color.black.opacity(0.72), lineWidth: 2)
-                                    )
-                                if showNoteLabels {
+                            let note: String = noteName(forString: stringNumber, fret: max(currentRound, 0), useFlats: false)
+                            let isAccidental: Bool = note.contains("#") || note.contains("b")
+                            let fillColor: Color = isAccidental ? Color.black.opacity(0.95) : Color.white.opacity(0.92)
+                            let strokeColor: Color = isAccidental ? Color.white.opacity(0.86) : Color.black.opacity(0.72)
+                            let textColor: Color = isAccidental ? Color.white.opacity(0.96) : Color.black
+                            let textSize = min(guideBoxHeight * 0.78, 28)
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(fillColor)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .stroke(strokeColor, lineWidth: 2)
+                                )
+                                .overlay {
                                     Text(note)
-                                        .font(.system(size: guideBoxHeight * 0.48, weight: .black, design: .monospaced))
-                                        .foregroundStyle(isAccidental ? Color.white : Color.black)
-                                        .minimumScaleFactor(0.4)
+                                        .font(.system(size: textSize, weight: .black, design: .monospaced))
+                                        .foregroundStyle(textColor)
+                                        .minimumScaleFactor(0.32)
                                         .lineLimit(1)
                                 }
-                            }
-                            .frame(width: boxWidth, height: guideBoxHeight)
-                            .position(x: stringCenters[index], y: guideBoxCenterY)
+                                .frame(width: boxWidth, height: guideBoxHeight)
+                                .position(x: stringCenters[index], y: guideBoxCenterY)
                         }
                     }
                     .allowsHitTesting(false)
@@ -1457,7 +1444,8 @@ struct MaestroGameplayView: View {
                     highScoreText: "$\(highScoreDollars)",
                     promptText: developerPromptText,
                     startupElapsed: startupSequenceElapsed,
-                    showStartupSequence: startupSequenceActivated
+                    showStartupSequence: startupSequenceActivated,
+                    startupFirstButtonPressed: startupFirstButtonPressed
                 )
                 .position(x: proxy.size.width / 2, y: topStatusCenterY)
                 .allowsHitTesting(false)
@@ -1466,7 +1454,6 @@ struct MaestroGameplayView: View {
                 let introScale = max(questionBoxIntroProgress, 0.001)
                 let introOffsetY = (1 - questionBoxIntroProgress) * ((proxy.size.height / 2) - topScreenY)
                 let questionBoxOffsetY = (1 - questionBoxIntroProgress) * ((proxy.size.height / 2) - orangeGreenUnitCenterY)
-                let shouldBlinkQuestionBox = !isCodeScreensaverMode && !isResolvingAnswer
                 let shouldShowQuestionUI = !isCodeScreensaverMode && !startupSequenceActivated && questionBoxIntroProgress > 0.0
 
                 if shouldShowQuestionUI {
@@ -1601,6 +1588,7 @@ struct MaestroGameplayView: View {
                 startupSequenceStartDate = .now
                 startupSequenceElapsed = 0
                 startupSequenceActivated = false
+                startupFirstButtonPressed = false
                 introWindowBlack = false
                 currentFretStart = 0
                 bankDollars = max(walletDollars, 0)
@@ -1611,7 +1599,7 @@ struct MaestroGameplayView: View {
             .onReceive(Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()) { date in
                 if startupSequenceActivated {
                     startupSequenceElapsed = max(date.timeIntervalSince(startupSequenceStartDate), 0)
-                    let startupState = StartupSequenceView.state(for: startupSequenceElapsed)
+                    let startupState = StartupSequenceView.state(for: startupSequenceElapsed, firstButtonPressed: startupFirstButtonPressed)
                     handleStartupSpeech(for: startupState.phase)
                 }
 
@@ -1736,12 +1724,16 @@ struct MaestroGameplayView: View {
                 startupSequenceActivated = true
                 startupSequenceStartDate = .now
                 startupSequenceElapsed = 0
-                startupSpeechPhase = .pendingSystem
                 questionBoxIntroProgress = 0
                 return
             }
 
-            let startupState = StartupSequenceView.state(for: startupSequenceElapsed)
+            if !startupFirstButtonPressed {
+                startupFirstButtonPressed = true
+                return
+            }
+
+            let startupState = StartupSequenceView.state(for: startupSequenceElapsed, firstButtonPressed: true)
             guard startupState.phase == .armed else { return }
             guard !isLaunchTransitionAnimating else { return }
 
@@ -1757,6 +1749,7 @@ struct MaestroGameplayView: View {
                 isCodeScreensaverMode = false
                 startupSequenceActivated = false
                 startupSequenceElapsed = 0
+                startupFirstButtonPressed = false
                 startupSpeechPhase = .idle
                 currentFretStart = isPhaseDescending ? maxFretOffset : minFretOffset
                 startGameFromBeginning()
@@ -2059,14 +2052,9 @@ struct MaestroGameplayView: View {
     private func handleStartupSpeech(for phase: StartupSequenceView.Phase) {
         guard audioEngineEnabled else { return }
         switch phase {
-        case .systemOnline:
+        case .systemOnlineStatic:
             if startupSpeechPhase == .pendingSystem {
                 speakStartup("SYSTEM ONLINE")
-                startupSpeechPhase = .pendingPhase
-            }
-        case .phaseOne:
-            if startupSpeechPhase == .pendingPhase {
-                speakStartup("PHASE ONE")
                 startupSpeechPhase = .pendingArmed
             }
         case .armed:

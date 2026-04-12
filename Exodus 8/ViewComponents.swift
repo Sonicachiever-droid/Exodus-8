@@ -99,7 +99,6 @@ struct MiniTVFrame: View {
                             )
                         )
                         .padding(8)
-                        .shadow(color: Color.black.opacity(0.55), radius: 12)
                 } else {
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .fill(
@@ -117,9 +116,6 @@ struct MiniTVFrame: View {
                             )
                         )
                         .padding(8)
-                        .overlay(EmptyView())
-                        .shadow(color: Color(red: 1.0, green: 0.55, blue: 0.0).opacity(0.35), radius: 14)
-                        .shadow(color: Color(red: 1.0, green: 0.55, blue: 0.0).opacity(0.20), radius: 28)
                 }
             }
 
@@ -127,7 +123,6 @@ struct MiniTVFrame: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(Color.clear)
                 .padding(12)
-                .shadow(color: Color.black.opacity(0.35), radius: 4, x: 0, y: 2)
 
             Text(text.uppercased())
                 .font(.system(size: max(height * 0.78 * fontScale, 14), weight: .black, design: .default))
