@@ -41,6 +41,17 @@ private struct WhiteNoteBoxOverlay: View {
         let boxWidth = min(clampedBoxHeight * 1.8, maxBoxWidthFromSpacing)
         let activeSet = Set(activeStringNumbers)
         return ZStack {
+            // Six individual translucent backgrounds for each answer box
+            ForEach(0..<totalStrings, id: \.self) { index in
+                let stringNumber = totalStrings - index
+                let isActive = activeSet.contains(stringNumber)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.black.opacity(0.42))
+                    .frame(width: boxWidth, height: clampedBoxHeight)
+                    .opacity(isActive ? 1 : 0.0001)
+                    .position(x: grooveCenters[index], y: centerY)
+            }
+
             ForEach(0..<totalStrings, id: \.self) { index in
                 let stringNumber = totalStrings - index
                 let isActive = activeSet.contains(stringNumber)
@@ -1893,10 +1904,13 @@ struct BeginnerGameplayView: View {
                     let guideTileWidth = max(minGuideSpacing * 0.82, 18)
                     let guideTileHeight = guideBoxHeight * 0.86
                     ZStack {
-                        RoundedRectangle(cornerRadius: guideBoxCornerRadius, style: .continuous)
-                            .fill(Color.black.opacity(0.42))
-                            .frame(width: guideBoxWidth, height: guideBoxHeight)
-                            .position(x: proxy.size.width / 2, y: guideBoxCenterY)
+                        // Six individual translucent backgrounds matching each note box
+                        ForEach(Array(fretboardStrings.enumerated()), id: \.offset) { index, _ in
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(Color.black.opacity(0.42))
+                                .frame(width: guideTileWidth, height: guideTileHeight)
+                                .position(x: stringCenters[index], y: guideBoxCenterY)
+                        }
 
                         ForEach(Array(fretboardStrings.enumerated()), id: \.offset) { index, stringNumber in
                             let note = noteName(forString: stringNumber, fret: max(currentRound, 0), useFlats: beginnerUsesFlats)
@@ -2313,8 +2327,8 @@ struct BeginnerGameplayView: View {
             .onChange(of: showAudioPage) { _, isPresented in
                 if isPresented {
                     syncBackingTrackPlayback()
-                } else if !backingTrackShouldPlayInGameplay {
-                    syncBackingTrackPlayback()
+                } else {
+                    syncBackingTrackPlayback(allowResumeFromPause: true)
                 }
             }
             .onChange(of: audioSettings.guitarTonePreset) { _, newValue in
@@ -3626,7 +3640,7 @@ struct BeginnerGameplayView: View {
         guitarNoteEngine.play(string: stringNumber, fret: max(fret, 0), velocity: velocity)
     }
 
-    private func syncBackingTrackPlayback() {
+    private func syncBackingTrackPlayback(allowResumeFromPause: Bool = false) {
         guard !availableBackingTracks.isEmpty else {
             midiEngine.stop()
             isBackingTrackPlaying = false
@@ -3654,6 +3668,14 @@ struct BeginnerGameplayView: View {
         }
 
         applyBeginnerBassTransposeForCurrentStage()
+        
+        // If allowed and same track was paused, resume from that position
+        if allowResumeFromPause {
+            midiEngine.resume()
+            isBackingTrackPlaying = midiEngine.isPlaying
+            return
+        }
+        
         midiEngine.play(url: trackURL, title: selectedTrack.title, loop: true)
         isBackingTrackPlaying = midiEngine.isPlaying
     }
