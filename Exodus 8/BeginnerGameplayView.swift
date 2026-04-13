@@ -2910,6 +2910,7 @@ struct BeginnerGameplayView: View {
         let useFlats = layoutMode == .beginner ? beginnerUsesFlats : false
         randomNoteGenerator.generateNoteSequence(for: max(currentRound, 0), useFlats: useFlats)
         applyBeginnerBassTransposeForCurrentStage()
+        prepareCurrentQuestion()
     }
 
     private func advanceBeginnerScaleStage(afterCompletionFromString selectedString: Int, playTransitionNote: Bool = true) {
@@ -3386,6 +3387,9 @@ struct BeginnerGameplayView: View {
         lastPromptedCorrectNote = correctNote
         lastPromptedStringHalf = .left
         lastPromptedStringNumber = nextString
+        withAnimation(.easeInOut(duration: 1.3)) {
+            currentFretStart = max(currentRound, 0)
+        }
     } else {
         // Chord style: existing behavior
         let fret = max(currentRound, 0)
@@ -3783,7 +3787,6 @@ struct BeginnerGameplayView: View {
         isRoundPaused = false
         roundRevealLastTickDate = nil
         midiEngine.resume()
-        isBackingTrackPlaying = midiEngine.isPlaying
         beginnerRuntime.beatLightFlashOn = false
         beginnerRuntime.beatLightLastProcessedBeat = nil
         beginnerRuntime.beatLightIntroMeasureSkipped = false
