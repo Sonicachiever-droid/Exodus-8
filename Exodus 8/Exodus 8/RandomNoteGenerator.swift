@@ -1,0 +1,58 @@
+import Foundation
+import Combine
+
+class RandomNoteGenerator: ObservableObject {
+    @Published var currentNoteSequence: [String] = []
+    @Published var sequenceProgressIndex: Int = 0
+    private(set) var noteStringMap: [Int] = []
+    private(set) var usedStringLocations: Set<String> = []
+
+    private let openStringPairs: [(note: String, string: Int)] = [
+        ("E", 6), ("A", 5), ("D", 4), ("G", 3), ("B", 2), ("E", 1)
+    ]
+
+    func generateNoteSequence(for fret: Int, useFlats: Bool = false) {
+        let sharps = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"]
+        let flats  = ["C","Db","D","Eb","E","F","Gb","G","Ab","A","Bb","B"]
+        let chromatic = useFlats ? flats : sharps
+        var pairs: [(note: String, string: Int)] = []
+        for entry in openStringPairs {
+            if let i = chromatic.firstIndex(of: entry.note) {
+                pairs.append((chromatic[(i + fret) % 12], entry.string))
+            }
+        }
+        let shuffled = pairs.shuffled()
+        currentNoteSequence = shuffled.map { $0.note }
+        noteStringMap = shuffled.map { $0.string }
+        usedStringLocations.removeAll()
+        sequenceProgressIndex = 0
+    }
+
+    var expectedString: Int? {
+        guard sequenceProgressIndex < noteStringMap.count else { return nil }
+        return noteStringMap[sequenceProgressIndex]
+    }
+
+    func isValidAnswer(note: String, string: Int) -> Bool {
+        guard sequenceProgressIndex < currentNoteSequence.count else { return false }
+        guard note == currentNoteSequence[sequenceProgressIndex] else { return false }
+        return !usedStringLocations.contains("\(note)-\(string)")
+    }
+
+    func advanceSequence() {
+        guard sequenceProgressIndex < currentNoteSequence.count else { return }
+        let note = currentNoteSequence[sequenceProgressIndex]
+        let string = noteStringMap[sequenceProgressIndex]
+        usedStringLocations.insert("\(note)-\(string)")
+        sequenceProgressIndex += 1
+    }
+
+    func isSequenceComplete() -> Bool { sequenceProgressIndex >= currentNoteSequence.count }
+
+    func resetForNewFret() {
+        currentNoteSequence.removeAll()
+        noteStringMap.removeAll()
+        usedStringLocations.removeAll()
+        sequenceProgressIndex = 0
+    }
+}
